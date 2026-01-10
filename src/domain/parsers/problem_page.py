@@ -169,5 +169,3 @@ class ProblemPageParser:
         except Exception as e:
             logger.warning(f"Failed to extract tags: {e}")
             return []
-
-

@@ -116,5 +116,3 @@ class TutorialParser:
             language=Language.AUTO,
             raw_bytes=pdf_bytes,
         )
-
-
