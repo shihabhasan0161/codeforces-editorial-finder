@@ -8,33 +8,22 @@ from loguru import logger
 
 from domain.models import ProblemData, ProblemIdentifier
 from domain.exceptions import ParsingError
-from domain.fetchers.http_client import HTTPClient
 from domain.parsers.url_parser import URLParser
 
 
 class ProblemPageParser:
     """Parser for extracting data from Codeforces problem pages."""
 
-    def __init__(self, http_client: Optional[HTTPClient] = None):
+    def __init__(self, http_client):
         """
         Initialize parser.
 
         Args:
-            http_client: HTTP client instance (creates new one if None)
+            http_client: Async HTTP client instance
         """
-        self.http_client = http_client or HTTPClient()
-        self._should_close_client = http_client is None
+        self.http_client = http_client
 
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        if self._should_close_client:
-            self.http_client.close()
-
-    def parse_problem_page(self, identifier: ProblemIdentifier) -> ProblemData:
+    async def parse_problem_page(self, identifier: ProblemIdentifier) -> ProblemData:
         """
         Parse problem page and extract data.
 
@@ -51,7 +40,7 @@ class ProblemPageParser:
         logger.info(f"Parsing problem page: {url}")
 
         try:
-            html = self.http_client.get_text(url)
+            html = await self.http_client.get_text(url)
             soup = BeautifulSoup(html, "lxml")
 
             # Extract problem title
@@ -182,20 +171,3 @@ class ProblemPageParser:
             return []
 
 
-def parse_problem(url: str, http_client: Optional[HTTPClient] = None) -> ProblemData:
-    """
-    Convenience function to parse problem from URL.
-
-    Args:
-        url: Problem URL
-        http_client: Optional HTTP client
-
-    Returns:
-        ProblemData
-    """
-    from domain.parsers.url_parser import parse_problem_url
-
-    identifier = parse_problem_url(url)
-
-    with ProblemPageParser(http_client) as parser:
-        return parser.parse_problem_page(identifier)

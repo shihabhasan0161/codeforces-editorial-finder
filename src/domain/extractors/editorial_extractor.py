@@ -6,7 +6,6 @@ from typing import Optional
 
 from loguru import logger
 
-from domain.openai.client import OpenAIClient
 from domain.models import (
     Editorial,
     CodeSnippet,
@@ -19,16 +18,16 @@ from domain.exceptions import ExtractionError
 class EditorialExtractor:
     """Extracts editorial/solution from tutorial content using OpenAI."""
 
-    def __init__(self, ai_client: Optional[OpenAIClient] = None):
+    def __init__(self, ai_client):
         """
         Initialize extractor.
 
         Args:
-            ai_client: OpenAI API client
+            ai_client: Async OpenAI API client
         """
-        self.ai_client = ai_client or OpenAIClient()
+        self.ai_client = ai_client
 
-    def extract(
+    async def extract(
         self,
         tutorial: TutorialData,
         identifier: ProblemIdentifier,
@@ -52,7 +51,7 @@ class EditorialExtractor:
 
         try:
             # Use OpenAI to extract solution
-            result = self.ai_client.extract_solution(
+            result = await self.ai_client.extract_solution(
                 tutorial_content=tutorial.content,
                 problem_id=identifier.problem_id,
                 problem_title=problem_title,
