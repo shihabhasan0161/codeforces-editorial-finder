@@ -59,11 +59,9 @@ class AsyncEditorialOrchestrator:
         logger.info(f"Getting editorial for URL: {url}")
 
         try:
-            # Step 1: Parse URL
             logger.info("Step 1: Parsing URL")
             identifier = URLParser.parse(url)
 
-            # Step 2: Check cache
             if self.use_cache and self.cache_client:
                 logger.info("Step 2: Checking cache")
                 cached = await self._get_from_cache(identifier.cache_key)
@@ -73,19 +71,15 @@ class AsyncEditorialOrchestrator:
                     problem_data = await self.problem_parser.parse_problem_page(identifier)
                     return cached.editorial, problem_data
 
-            # Step 3: Parse problem page
             logger.info("Step 3: Parsing problem page")
             problem_data = await self.problem_parser.parse_problem_page(identifier)
 
-            # Step 4: Find tutorial URL
             logger.info("Step 4: Finding tutorial URL")
             tutorial_url = await self.tutorial_finder.find_tutorial(identifier)
 
-            # Step 5: Parse tutorial content
             logger.info("Step 5: Parsing tutorial content")
             tutorial_data = await self.tutorial_parser.parse(tutorial_url)
 
-            # Step 6: Extract editorial
             logger.info("Step 6: Extracting editorial")
             editorial = await self.editorial_extractor.extract(
                 tutorial_data,
@@ -93,7 +87,6 @@ class AsyncEditorialOrchestrator:
                 problem_data.title,
             )
 
-            # Step 7: Cache result
             if self.use_cache and self.cache_client:
                 logger.info("Step 7: Caching result")
                 cached_editorial = CachedEditorial(
