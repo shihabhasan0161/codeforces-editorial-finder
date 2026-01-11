@@ -5,42 +5,28 @@ import re
 
 from loguru import logger
 
-from codeforces_editorial.openai.client import OpenAIClient
-from codeforces_editorial.fetchers.http_client import HTTPClient
-from codeforces_editorial.models import ProblemIdentifier
-from codeforces_editorial.parsers.url_parser import URLParser
-from codeforces_editorial.utils.exceptions import EditorialNotFoundError
+from domain.models import ProblemIdentifier
+from domain.parsers.url_parser import URLParser
+from domain.exceptions import EditorialNotFoundError
+from infrastructure.openai_client import AsyncOpenAIClient
+from infrastructure.http_client import AsyncHTTPClient
 
 
 class TutorialFinder:
     """Finds tutorial/editorial links for Codeforces problems."""
 
-    def __init__(
-        self,
-        ai_client: Optional[OpenAIClient] = None,
-        http_client: Optional[HTTPClient] = None,
-    ):
+    def __init__(self, ai_client, http_client):
         """
         Initialize tutorial finder.
 
         Args:
-            ai_client: OpenAI API client
-            http_client: HTTP client
+            ai_client: Async OpenAI API client
+            http_client: Async HTTP client
         """
-        self.ai_client = ai_client or OpenAIClient()
-        self.http = http_client or HTTPClient()
-        self._should_close_http = http_client is None
+        self.ai_client = ai_client
+        self.http = http_client
 
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        if self._should_close_http:
-            self.http.close()
-
-    def find_tutorial(self, identifier: ProblemIdentifier) -> str:
+    async def find_tutorial(self, identifier: ProblemIdentifier) -> str:
         """
         Find tutorial URL for a problem.
 
@@ -56,12 +42,12 @@ class TutorialFinder:
         logger.info(f"Searching for tutorial for problem {identifier}")
 
         # Strategy 1: Try contest page
-        tutorial_url = self._try_contest_page(identifier)
+        tutorial_url = await self._try_contest_page(identifier)
         if tutorial_url:
             return tutorial_url
 
         # Strategy 2: Try common blog patterns
-        tutorial_url = self._try_blog_patterns(identifier)
+        tutorial_url = await self._try_blog_patterns(identifier)
         if tutorial_url:
             return tutorial_url
 
@@ -71,7 +57,7 @@ class TutorialFinder:
             f"The contest might not have an editorial, or it might be in an unexpected location."
         )
 
-    def _try_contest_page(self, identifier: ProblemIdentifier) -> Optional[str]:
+    async def _try_contest_page(self, identifier: ProblemIdentifier) -> Optional[str]:
         """
         Try to find editorial link on contest main page using OpenAI.
 
@@ -85,10 +71,10 @@ class TutorialFinder:
 
         try:
             contest_url = URLParser.build_contest_url(identifier)
-            html = self.http.get_text(contest_url)
+            html = await self.http.get_text(contest_url)
 
             # Use OpenAI to find editorial link
-            editorial_url = self.ai_client.find_editorial_link(html, identifier.problem_id)
+            editorial_url = await self.ai_client.find_editorial_link(html, identifier.problem_id)
 
             if editorial_url:
                 # Normalize URL
@@ -101,7 +87,7 @@ class TutorialFinder:
 
         return None
 
-    def _try_blog_patterns(self, identifier: ProblemIdentifier) -> Optional[str]:
+    async def _try_blog_patterns(self, identifier: ProblemIdentifier) -> Optional[str]:
         """
         Try common blog URL patterns for editorials.
 
@@ -123,7 +109,7 @@ class TutorialFinder:
                 f"https://codeforces.com/search?query=contest+{identifier.contest_id}+tutorial"
             )
 
-            html = self.http.get_text(search_url)
+            html = await self.http.get_text(search_url)
 
             # Look for blog entry links in search results
             blog_pattern = r'href="(/blog/entry/\d+)"'
@@ -137,7 +123,7 @@ class TutorialFinder:
 
                     # Fetch and validate
                     try:
-                        blog_html = self.http.get_text(blog_url)
+                        blog_html = await self.http.get_text(blog_url)
 
                         # Simple validation: check if problem ID appears in blog
                         if identifier.problem_id in blog_html or identifier.full_id in blog_html:
@@ -173,10 +159,10 @@ class TutorialFinder:
         return url
 
 
-def find_tutorial_url(
+async def find_tutorial_url(
     identifier: ProblemIdentifier,
-    ai_client: Optional[OpenAIClient] = None,
-    http_client: Optional[HTTPClient] = None,
+    ai_client: Optional[AsyncOpenAIClient] = None,
+    http_client: Optional[AsyncHTTPClient] = None,
 ) -> str:
     """
     Convenience function to find tutorial URL.
@@ -192,5 +178,5 @@ def find_tutorial_url(
     Raises:
         EditorialNotFoundError: If tutorial not found
     """
-    with TutorialFinder(ai_client, http_client) as finder:
-        return finder.find_tutorial(identifier)
+    finder = TutorialFinder(ai_client, http_client)
+    return await finder.find_tutorial(identifier)

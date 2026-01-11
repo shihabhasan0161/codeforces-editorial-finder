@@ -1,40 +1,27 @@
 """Parser for tutorial content (HTML and PDF)."""
 
-from typing import Optional
-
 from bs4 import BeautifulSoup
 from loguru import logger
 import fitz  # PyMuPDF
 
-from codeforces_editorial.config import get_settings
-from codeforces_editorial.fetchers.http_client import HTTPClient
-from codeforces_editorial.models import TutorialData, TutorialFormat, Language
-from codeforces_editorial.utils.exceptions import ParsingError
+from config import get_settings
+from domain.models import TutorialData, TutorialFormat, Language
+from domain.exceptions import ParsingError
 
 
 class TutorialParser:
     """Parses tutorial content from HTML or PDF."""
 
-    def __init__(self, http_client: Optional[HTTPClient] = None):
+    def __init__(self, http_client):
         """
         Initialize parser.
 
         Args:
-            http_client: HTTP client
+            http_client: Async HTTP client
         """
-        self.http = http_client or HTTPClient()
-        self._should_close_http = http_client is None
+        self.http = http_client
 
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        if self._should_close_http:
-            self.http.close()
-
-    def parse(self, url: str) -> TutorialData:
+    async def parse(self, url: str) -> TutorialData:
         """
         Parse tutorial from URL.
 
@@ -51,19 +38,19 @@ class TutorialParser:
 
         try:
             # Detect content type
-            content_type = self.http.get_content_type(url)
+            content_type = await self.http.get_content_type(url)
             logger.debug(f"Content type: {content_type}")
 
             if "pdf" in content_type:
-                return self._parse_pdf(url)
+                return await self._parse_pdf(url)
             else:
-                return self._parse_html(url)
+                return await self._parse_html(url)
 
         except Exception as e:
             logger.error(f"Failed to parse tutorial: {e}")
             raise ParsingError(f"Failed to parse tutorial {url}: {e}") from e
 
-    def _parse_html(self, url: str) -> TutorialData:
+    async def _parse_html(self, url: str) -> TutorialData:
         """Parse HTML tutorial."""
         logger.debug("Parsing as HTML")
 
@@ -73,9 +60,9 @@ class TutorialParser:
             settings = get_settings()
             wait_time = settings.http_js_wait
             logger.info(f"Using JS rendering for blog/contest page (wait: {wait_time}ms)")
-            html = self.http.get_text_with_js(url, wait_time=wait_time)
+            html = await self.http.get_text_with_js(url, wait_time=wait_time)
         else:
-            html = self.http.get_text(url)
+            html = await self.http.get_text(url)
 
         soup = BeautifulSoup(html, "lxml")
 
@@ -105,11 +92,11 @@ class TutorialParser:
             title=title,
         )
 
-    def _parse_pdf(self, url: str) -> TutorialData:
+    async def _parse_pdf(self, url: str) -> TutorialData:
         """Parse PDF tutorial."""
         logger.debug("Parsing as PDF")
 
-        pdf_bytes = self.http.get_bytes(url)
+        pdf_bytes = await self.http.get_bytes(url)
 
         # Extract text from PDF
         text_content = []
@@ -127,18 +114,3 @@ class TutorialParser:
             language=Language.AUTO,
             raw_bytes=pdf_bytes,
         )
-
-
-def parse_tutorial(url: str, http_client: Optional[HTTPClient] = None) -> TutorialData:
-    """
-    Convenience function to parse tutorial.
-
-    Args:
-        url: Tutorial URL
-        http_client: Optional HTTP client
-
-    Returns:
-        TutorialData
-    """
-    with TutorialParser(http_client) as parser:
-        return parser.parse(url)

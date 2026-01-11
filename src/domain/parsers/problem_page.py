@@ -1,15 +1,17 @@
 """Parser for Codeforces problem pages."""
 
 import re
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from bs4 import BeautifulSoup, Tag
 from loguru import logger
 
-from codeforces_editorial.models import ProblemData, ProblemIdentifier
-from codeforces_editorial.utils.exceptions import ParsingError
-from codeforces_editorial.fetchers.http_client import HTTPClient
-from codeforces_editorial.parsers.url_parser import URLParser
+from domain.models import ProblemData, ProblemIdentifier
+from domain.exceptions import ParsingError
+from domain.parsers.url_parser import URLParser
+
+if TYPE_CHECKING:
+    from infrastructure.http_client import AsyncHTTPClient
 
 
 class ProblemPageParser:
@@ -20,34 +22,27 @@ class ProblemPageParser:
     RELEVANT_URL_SEGMENTS = ("/blog/", "/contest/")
     CODEFORCES_BASE_URL = "https://codeforces.com"
 
-    def __init__(self, http_client: Optional[HTTPClient] = None):
+    def __init__(self, http_client: Optional["AsyncHTTPClient"] = None):
         """
         Initialize parser.
 
         Args:
-            http_client: HTTP client instance (creates new one if None)
+            http_client: Async HTTP client instance
         """
-        self.http_client = http_client or HTTPClient()
-        self._should_close_client = http_client is None
+        self.http_client = http_client
 
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        if self._should_close_client:
-            self.http_client.close()
-
-    def parse_problem_page(self, identifier: ProblemIdentifier) -> ProblemData:
+    async def parse_problem_page(self, identifier: ProblemIdentifier) -> ProblemData:
         """
         Parse problem page and extract data.
         """
         url = URLParser.build_problem_url(identifier)
         logger.info(f"Parsing problem page: {url}")
 
+        if not self.http_client:
+            raise ParsingError(f"HTTP client not initialized for {url}")
+
         try:
-            html = self.http_client.get_text(url)
+            html = await self.http_client.get_text(url)
             soup = BeautifulSoup(html, "lxml")
 
             # Extract minimal metadata
@@ -157,7 +152,7 @@ class ProblemPageParser:
         return href
 
 
-def parse_problem(url: str, http_client: Optional[HTTPClient] = None) -> ProblemData:
+async def parse_problem(url: str, http_client: Optional["AsyncHTTPClient"] = None) -> ProblemData:
     """
     Convenience function to parse problem from URL.
 
@@ -168,9 +163,9 @@ def parse_problem(url: str, http_client: Optional[HTTPClient] = None) -> Problem
     Returns:
         ProblemData
     """
-    from codeforces_editorial.parsers.url_parser import parse_problem_url
+    from domain.parsers.url_parser import parse_problem_url
 
     identifier = parse_problem_url(url)
 
-    with ProblemPageParser(http_client) as parser:
-        return parser.parse_problem_page(identifier)
+    parser = ProblemPageParser(http_client)
+    return await parser.parse_problem_page(identifier)
