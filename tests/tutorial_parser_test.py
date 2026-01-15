@@ -1,9 +1,8 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from bs4 import BeautifulSoup
 
 from domain.parsers.tutorial_parser import TutorialParser
-from domain.models import TutorialFormat, Language, TutorialData
+from domain.models import TutorialFormat
 from domain.exceptions import ParsingError
 
 
